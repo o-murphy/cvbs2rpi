@@ -13,11 +13,13 @@ import time
 
 import cv2
 import imutils
-from PySide6.QtCore import QTimer, QPoint, Signal, Qt, QRectF, QSize
-from PySide6.QtGui import QFont, QPainter, QImage, QPixmap
+from PySide6.QtCore import QTimer, QPoint, Signal, Qt, QRectF, QSize, QObject
+from PySide6.QtGui import QFont, QPainter, QImage, QPixmap, QAction, QKeySequence, QShortcut
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QGridLayout, QVBoxLayout, QGraphicsWidget, \
     QGraphicsView, QGraphicsScene, QGraphicsItem
 from PySide6.QtWidgets import QWidget
+
 
 __version__ = "0.0.1b0"
 
@@ -40,6 +42,7 @@ def grab_images(cam_num: int, queue_: queue.Queue, fps_queue_: queue.Queue):
     cap = cv2.VideoCapture(cam_num - 1 + CAP_API)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, IMG_SIZE[0])
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, IMG_SIZE[1])
+    cap.set(cv2.CAP_PROP_FPS, 60)
     if EXPOSURE:
         cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0)
         cap.set(cv2.CAP_PROP_EXPOSURE, EXPOSURE)
@@ -107,21 +110,39 @@ class Overlay(QGraphicsView):
         # self.label.move(1, 1)
 
         self.setStyleSheet("background: transparent")
-        rect = QRectF(QPoint(0, 0), QPoint(self.size().width(), self.size().height()))
+        rect = QRectF(QPoint(0, 0), QPoint(self.parent().size().width(), self.parent().size().height()))
         self.scene_ = QGraphicsScene()
         self.scene_.setSceneRect(rect)
         self.setScene(self.scene_)
 
         self.fps = self.scene_.addText("0 FPS")
+        self.fps.setDefaultTextColor("#00FF00")
+        self.fps.setPos(10, 100)
+
+        fps_font = self.fps.font()
+        fps_font.setBold(True)
+        fps_font.setPointSizeF(32)
+        self.fps.setFont(fps_font)
 
         self.scene_.addItem(self.fps)
+
+        self.rec_state = self.scene_.addText("")
+        self.rec_state.setDefaultTextColor("#FF0000")
+        self.rec_state.setPos(10, 150)
+        self.rec_state.setFont(fps_font)
+
+        self.time = self.scene_.addText("13:30 06.12.2023")
+        self.time.setDefaultTextColor("#00FF00")
+        self.time.setPos(10, 1000)
+        self.time.setFont(fps_font)
 
     def display_fps(self, queue_: queue.Queue):
         if not queue_.empty():
             fps = queue_.get()
-    #         self.label.setText(f"{fps} FPS")
             self.fps.setPlainText(f"{fps} FPS")
 
+    def rec_on(self, state=False):
+        self.rec_state.setPlainText(f"REC" if state else "")
 
 
 # Main window
@@ -161,6 +182,16 @@ class MyWindow(QMainWindow):
 
         self.central.setLayout(self.layout_)
         self.setCentralWidget(self.central)
+
+        self.rec_state = False
+
+        shortcut = QKeySequence("R")
+        self.shortcut = QShortcut(shortcut, self)
+        self.shortcut.activated.connect(self.rec_start)
+
+    def rec_start(self):
+        self.rec_state = not self.rec_state
+        self.overlay.rec_on(self.rec_state)
 
     # Start image capture & display
     def start(self):
